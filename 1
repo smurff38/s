@@ -1,0 +1,118 @@
+Вот пошаговый план настройки устройств согласно требованиям.  
+
+---
+
+### **1. Настройка имен устройств (FQDN)**  
+На каждом устройстве установите полное доменное имя:  
+
+```bash
+sudo hostnamectl set-hostname <имя_устройства>
+echo "<ip-адрес> <имя_устройства> <имя_устройства>.au.team" | sudo tee -a /etc/hosts
+```
+
+Пример для `admin-hq.au.team`:  
+```bash
+sudo hostnamectl set-hostname admin-hq.au.team
+echo "192.168.11.100 admin-hq admin-hq.au.team" | sudo tee -a /etc/hosts
+```
+
+---
+
+### **2. Разбиение на подсети**  
+
+#### **Сети офисов**  
+- HQ: `192.168.11.0/24`  
+- DT: `192.168.33.0/24`  
+- Туннель: `10.10.10.0/30` (два адреса для маршрутизаторов)  
+
+#### **VLAN-ы**  
+- **VLAN110 (64 адреса):** `/26` → `192.168.11.0/26`  
+- **VLAN220 (16 адресов):** `/28` → `192.168.11.64/28`  
+- **VLAN330 (8 адресов):** `/29` → `192.168.11.80/29`  
+
+Для DT аналогично:  
+- **VLAN110:** `192.168.33.0/26`  
+- **VLAN220:** `192.168.33.64/28`  
+- **VLAN330:** `192.168.33.80/29`  
+
+Туннель между офисами (`10.10.10.0/30`):  
+- R-HQ: `10.10.10.1`  
+- R-DT: `10.10.10.2`  
+
+---
+
+### **3. Настройка IP-адресов**  
+
+Для каждого устройства задайте IP-адрес в `netplan` (если используется). Например, для `srv1-hq.au.team`:  
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    eth0:
+      addresses:
+        - 192.168.11.10/24
+      gateway4: 192.168.11.1
+      nameservers:
+        addresses:
+          - 8.8.8.8
+```
+
+Примените:  
+```bash
+sudo netplan apply
+```
+
+Для `R-HQ` и `R-DT`:  
+```yaml
+    eth1:
+      addresses:
+        - 10.10.10.1/30  # Для R-HQ
+```
+```yaml
+    eth1:
+      addresses:
+        - 10.10.10.2/30  # Для R-DT
+```
+
+---
+
+### **4. Создание пользователя `sshuser`**  
+
+На всех устройствах, кроме `FW-DT`:  
+
+```bash
+sudo useradd -m -s /bin/bash sshuser
+echo "sshuser:P@ssw0rd" | sudo chpasswd
+```
+
+Добавляем в `sudo` без пароля:  
+```bash
+echo "sshuser ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/sshuser
+```
+
+---
+
+### **5. Настройка SSH**  
+
+В `/etc/ssh/sshd_config` добавьте:  
+```bash
+PermitRootLogin no
+PasswordAuthentication yes
+AllowUsers sshuser
+```
+Примените:  
+```bash
+sudo systemctl restart sshd
+```
+
+---
+
+### **6. Доступ root на маршрутизаторах**  
+
+Для `R-HQ` и `R-DT`:  
+```bash
+sudo usermod -aG wheel sshuser
+```
+
+Готово! Теперь `sshuser` имеет полные привилегии.
