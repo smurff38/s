@@ -1,0 +1,193 @@
+Для настройки системы централизованного мониторинга с использованием **Zabbix** на сервере **SRV3-DT** с базой данных **PostgreSQL** и веб-сервером **Apache**, следуйте приведённым ниже шагам.
+
+### **1. Установка Zabbix на SRV3-DT**
+
+#### **Шаг 1: Установка PostgreSQL**
+
+1. Установите PostgreSQL:
+
+```bash
+sudo dnf install postgresql-server postgresql-contrib
+```
+
+2. Инициализируйте базу данных:
+
+```bash
+sudo postgresql-setup --initdb
+```
+
+3. Запустите и добавьте PostgreSQL в автозагрузку:
+
+```bash
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+```
+
+#### **Шаг 2: Создание базы данных для Zabbix**
+
+1. Подключитесь к PostgreSQL:
+
+```bash
+sudo -u postgres psql
+```
+
+2. Создайте пользователя и базу данных для Zabbix:
+
+```sql
+CREATE USER zabbix WITH PASSWORD 'zabbixpwd';
+CREATE DATABASE zabbix ENCODING='UTF8' OWNER zabbix;
+GRANT ALL PRIVILEGES ON DATABASE zabbix TO zabbix;
+```
+
+3. Выход из PostgreSQL:
+
+```sql
+\q
+```
+
+#### **Шаг 3: Установка Zabbix-сервера и веб-интерфейса**
+
+1. Добавьте репозиторий Zabbix для установки:
+
+```bash
+sudo rpm -ivh https://repo.zabbix.com/zabbix/5.0/rhel/7/x86_64/zabbix-release-5.0-2.el7.x86_64.rpm
+```
+
+2. Установите сервер Zabbix и веб-интерфейс:
+
+```bash
+sudo dnf install zabbix-server-pgsql zabbix-web-pgsql zabbix-agent apache2
+```
+
+#### **Шаг 4: Конфигурация Zabbix-сервера**
+
+1. Откройте конфигурационный файл Zabbix-сервера:
+
+```bash
+sudo nano /etc/zabbix/zabbix_server.conf
+```
+
+2. Убедитесь, что указаны правильные настройки для подключения к базе данных PostgreSQL:
+
+```ini
+DBHost=localhost
+DBName=zabbix
+DBUser=zabbix
+DBPassword=zabbixpwd
+```
+
+3. Сохраните и закройте файл.
+
+#### **Шаг 5: Настройка веб-сервера Apache**
+
+1. Откройте конфигурацию веб-сервера Zabbix:
+
+```bash
+sudo nano /etc/httpd/conf.d/zabbix.conf
+```
+
+2. Настройте часовой пояс для Zabbix:
+
+```ini
+php_value date.timezone Europe/Moscow
+```
+
+3. Перезапустите веб-сервер Apache:
+
+```bash
+sudo systemctl restart httpd
+sudo systemctl enable httpd
+```
+
+#### **Шаг 6: Инициализация базы данных Zabbix**
+
+1. Выполните скрипт для подготовки базы данных:
+
+```bash
+sudo zabbix-server -n
+```
+
+2. Инициализация базы данных через команду:
+
+```bash
+sudo -u zabbix psql -d zabbix -f /usr/share/doc/zabbix-server-pgsql*/create.sql.gz
+```
+
+3. Запустите Zabbix-сервер:
+
+```bash
+sudo systemctl start zabbix-server
+sudo systemctl enable zabbix-server
+```
+
+#### **Шаг 7: Настройка веб-интерфейса Zabbix**
+
+1. Перейдите в веб-браузер по адресу:
+
+```plaintext
+http://<IP адрес SRV3-DT>/zabbix
+```
+
+2. Введите логин и пароль администратора (по умолчанию `Admin` и `zabbix`).
+
+3. Во время настройки веб-интерфейса укажите:
+   - Базу данных: `zabbix`
+   - Пользователь: `zabbix`
+   - Пароль: `zabbixpwd`
+   - Часовой пояс: `Europe/Moscow`
+
+#### **Шаг 8: Настройка узлов для мониторинга**
+
+1. После успешной установки Zabbix добавьте узлы сети с полными именами устройств (например, `SRV1-DT`, `SRV2-DT`, `SRV3-DT`, `SRV-HQ`).
+   
+2. Убедитесь, что агенты Zabbix настроены на этих узлах и работают, если необходимо.
+
+### **2. Установка Zabbix-агента на узлы**
+
+#### **Шаг 1: Установка Zabbix-агента**
+
+На каждом из узлов, которые необходимо мониторить (например, **SRV1-DT**, **SRV2-DT**, **SRV-HQ**), установите Zabbix-агент:
+
+```bash
+sudo dnf install zabbix-agent
+```
+
+#### **Шаг 2: Настройка Zabbix-агента**
+
+1. Откройте конфигурацию агента:
+
+```bash
+sudo nano /etc/zabbix/zabbix_agentd.conf
+```
+
+2. Укажите адрес сервера Zabbix:
+
+```ini
+Server=<IP адрес SRV3-DT>
+ServerActive=<IP адрес SRV3-DT>
+Hostname=<Полное имя узла>
+```
+
+3. Перезапустите агент:
+
+```bash
+sudo systemctl restart zabbix-agent
+sudo systemctl enable zabbix-agent
+```
+
+#### **Шаг 3: Добавление узлов в Zabbix**
+
+1. В веб-интерфейсе Zabbix добавьте узлы (например, **SRV1-DT**, **SRV2-DT**, **SRV-HQ**) в список объектов мониторинга.
+
+2. Укажите полные имена устройств и назначьте их соответствующим группам.
+
+---
+
+### **Резюме**
+
+1. Установлен сервер Zabbix на **SRV3-DT** с базой данных PostgreSQL и веб-сервером Apache.
+2. Конфигурированы Zabbix-сервер и веб-интерфейс с настройкой часового пояса Europe/Moscow.
+3. Установлены и настроены Zabbix-агенты на узлах для мониторинга.
+4. Система мониторинга теперь доступна по адресу `http://<IP адрес SRV3-DT>/zabbix`.
+
+Вы можете использовать Zabbix для мониторинга состояния серверов и других устройств в вашей сети.
