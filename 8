@@ -1,0 +1,230 @@
+Для настройки DNS в вашей инфраструктуре, мы будем использовать BIND9 на серверах **SRV1-HQ** и **SRV1-DT** для реализации основной и резервной DNS-системы, а также настроим пересылку DNS-запросов на общедоступный сервер.
+
+### **1. Настройка основного DNS сервера (SRV1-HQ)**
+
+#### **Установка BIND9 на SRV1-HQ**
+1. Установите BIND9 на сервер **SRV1-HQ**:
+
+```bash
+sudo apt update
+sudo apt install bind9 bind9utils bind9-doc
+```
+
+2. Настройте основной файл конфигурации BIND9:
+
+Откройте файл конфигурации `/etc/bind/named.conf.local`:
+
+```bash
+sudo nano /etc/bind/named.conf.local
+```
+
+Добавьте зоны для прямого и обратного разрешения:
+
+```bash
+// Зона для прямого разрешения имен
+zone "au.team" {
+    type master;
+    file "/etc/bind/db.au.team";
+};
+
+// Зона для обратного разрешения
+zone "11.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.11";
+};
+
+zone "33.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.33";
+};
+```
+
+#### **Создание файлов базы данных для DNS**
+
+1. Создайте файл базы данных для прямого разрешения имен:
+
+```bash
+sudo nano /etc/bind/db.au.team
+```
+
+Добавьте следующие записи:
+
+```bash
+$TTL 86400
+@ IN SOA ns1.au.team. admin.au.team. (
+    2025022801 ; Serial
+    3600       ; Refresh
+    1800       ; Retry
+    1209600    ; Expire
+    86400 )    ; Minimum TTL
+
+; Основные DNS сервера
+@   IN NS   ns1.au.team.
+@   IN NS   ns2.au.team.
+
+; Записи A для устройств
+r-dt.au.team.       IN A    192.168.33.1
+fw-dt.au.team.      IN A    192.168.33.2
+admin-dt.au.team.   IN A    192.168.33.3
+cli-dt.au.team.     IN A    192.168.33.4
+srv1-dt.au.team.    IN A    192.168.33.5
+r-hq.au.team.       IN A    192.168.11.1
+sw1-hq.au.team.     IN A    192.168.11.2
+admin-hq.au.team.   IN A    192.168.11.3
+cli-hq.au.team.     IN A    192.168.11.4
+srv1-hq.au.team.    IN A    192.168.11.5
+
+; Записи PTR для обратного разрешения
+1   IN PTR  r-hq.au.team.
+2   IN PTR  sw1-hq.au.team.
+3   IN PTR  admin-hq.au.team.
+4   IN PTR  cli-hq.au.team.
+5   IN PTR  srv1-hq.au.team.
+33  IN PTR  r-dt.au.team.
+34  IN PTR  fw-dt.au.team.
+35  IN PTR  admin-dt.au.team.
+36  IN PTR  cli-dt.au.team.
+37  IN PTR  srv1-dt.au.team.
+```
+
+2. Создайте файл базы данных для обратного разрешения сети HQ:
+
+```bash
+sudo nano /etc/bind/db.192.168.11
+```
+
+Добавьте:
+
+```bash
+$TTL 86400
+@ IN SOA ns1.au.team. admin.au.team. (
+    2025022801 ; Serial
+    3600       ; Refresh
+    1800       ; Retry
+    1209600    ; Expire
+    86400 )    ; Minimum TTL
+
+; Записи PTR для обратного разрешения
+1   IN PTR r-hq.au.team.
+2   IN PTR sw1-hq.au.team.
+3   IN PTR admin-hq.au.team.
+4   IN PTR cli-hq.au.team.
+5   IN PTR srv1-hq.au.team.
+```
+
+3. Создайте файл базы данных для обратного разрешения сети DT:
+
+```bash
+sudo nano /etc/bind/db.192.168.33
+```
+
+Добавьте:
+
+```bash
+$TTL 86400
+@ IN SOA ns1.au.team. admin.au.team. (
+    2025022801 ; Serial
+    3600       ; Refresh
+    1800       ; Retry
+    1209600    ; Expire
+    86400 )    ; Minimum TTL
+
+; Записи PTR для обратного разрешения
+1   IN PTR r-dt.au.team.
+2   IN PTR fw-dt.au.team.
+3   IN PTR admin-dt.au.team.
+4   IN PTR cli-dt.au.team.
+5   IN PTR srv1-dt.au.team.
+```
+
+#### **Настройка безопасности для загрузки записей**
+
+Добавьте правило для разрешения загрузки только для **SRV1-DT** в файл `/etc/bind/named.conf.options`:
+
+```bash
+sudo nano /etc/bind/named.conf.options
+```
+
+Добавьте следующие строки:
+
+```bash
+options {
+    allow-transfer { 192.168.33.5; };  // Разрешить только SRV1-DT
+    forwarders {
+        8.8.8.8; // Общедоступный DNS сервер Google
+        8.8.4.4;
+    };
+};
+```
+
+#### **Перезапуск BIND9**
+
+Перезапустите службу BIND9:
+
+```bash
+sudo systemctl restart bind9
+```
+
+---
+
+### **2. Настройка резервного DNS сервера (SRV1-DT)**
+
+#### **Установка BIND9 на SRV1-DT**
+1. Установите BIND9 на сервер **SRV1-DT**:
+
+```bash
+sudo apt update
+sudo apt install bind9 bind9utils bind9-doc
+```
+
+2. Настройте файл `/etc/bind/named.conf.local` для резервной зоны:
+
+```bash
+sudo nano /etc/bind/named.conf.local
+```
+
+Добавьте:
+
+```bash
+zone "au.team" {
+    type slave;
+    file "/var/cache/bind/db.au.team";
+    masters { 192.168.11.5; }; // Адрес основного сервера (SRV1-HQ)
+};
+
+zone "11.168.192.in-addr.arpa" {
+    type slave;
+    file "/var/cache/bind/db.192.168.11";
+    masters { 192.168.11.5; };
+};
+
+zone "33.168.192.in-addr.arpa" {
+    type slave;
+    file "/var/cache/bind/db.192.168.33";
+    masters { 192.168.11.5; };
+};
+```
+
+3. Перезапустите BIND9:
+
+```bash
+sudo systemctl restart bind9
+```
+
+---
+
+### **3. Настройка клиентов на использование DNS серверов**
+
+#### **Для клиентов в офисе HQ**
+На всех устройствах в офисе HQ настройте основной DNS сервер **SRV1-HQ** (IP: `192.168.11.5`) и резервный **SRV1-DT** (IP: `192.168.33.5`).
+
+#### **Для клиентов в офисе DT**
+На всех устройствах в офисе DT настройте основной DNS сервер **SRV1-DT** (IP: `192.168.33.5`) и резервный **SRV1-HQ** (IP: `192.168.11.5`).
+
+---
+
+### **Резюме**
+1. Мы настроили основной DNS сервер **SRV1-HQ** для создания записей A, PTR и CNAME, а также защиты загрузки записей только для **SRV1-DT**.
+2. Мы настроили **SRV1-DT** как резервный DNS сервер.
+3. Все устройства в офисах настроены на использование обоих DNS серверов.
+4. Для пересылки DNS-запросов настроен общедоступный сервер Google (8.8.8.8).
