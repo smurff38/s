@@ -1,0 +1,143 @@
+### **Настройка динамической маршрутизации OSPF на маршрутизаторах EcoRouter (VyOS)**
+
+Настроим OSPF для маршрутизаторов R-HQ, R-DT и FW-DT, следуя вашим требованиям.
+
+---
+
+### **1. Настройка OSPF между офисами DT и HQ**
+
+#### **На R-HQ (HQ)**
+1. Включаем OSPF и настраиваем интерфейсы, по которым будет происходить обмен маршрутами.
+2. Применяем парольную защиту OSPF.
+3. Ограничиваем маршруты, которые могут быть анонсированы и получены.
+
+```bash
+configure
+
+# Включение OSPF
+set protocols ospf parameters router-id 192.168.11.1
+set protocols ospf area 0 network 192.168.11.0/24
+set protocols ospf area 0 network 10.10.10.2/30  # GRE-туннель
+
+# Настройка пароля для OSPF
+set protocols ospf authentication message-digest
+set protocols ospf authentication key P@ssw0rd
+
+# Запрет на вброс маршрутов с ненужных интерфейсов
+set protocols ospf interface eth0 passive-interface
+set protocols ospf interface tun0 passive-interface  # Если вы не хотите анонсировать этот интерфейс
+
+# Включение OSPF
+commit
+save
+exit
+```
+
+#### **На R-DT (DT)**
+1. Включаем OSPF и настраиваем интерфейсы для обмена маршрутами.
+2. Применяем парольную защиту OSPF.
+3. Ограничиваем маршруты, которые могут быть анонсированы и получены.
+
+```bash
+configure
+
+# Включение OSPF
+set protocols ospf parameters router-id 192.168.33.1
+set protocols ospf area 0 network 192.168.33.0/24
+set protocols ospf area 0 network 10.10.10.1/30  # GRE-туннель
+
+# Настройка пароля для OSPF
+set protocols ospf authentication message-digest
+set protocols ospf authentication key P@ssw0rd
+
+# Запрет на вброс маршрутов с ненужных интерфейсов
+set protocols ospf interface eth0 passive-interface
+set protocols ospf interface tun0 passive-interface  # Если вы не хотите анонсировать этот интерфейс
+
+# Включение OSPF
+commit
+save
+exit
+```
+
+---
+
+### **2. Настройка OSPF между R-DT и FW-DT**
+
+#### **На R-DT (DT)**
+1. Настроим R-DT для обмена маршрутами с FW-DT через OSPF.
+2. Применим парольную защиту для OSPF.
+3. Будем анонсировать маршрут по умолчанию и другие маршруты в FW-DT.
+
+```bash
+configure
+
+# Включение OSPF
+set protocols ospf parameters router-id 192.168.33.1
+set protocols ospf area 0 network 192.168.33.0/24
+set protocols ospf area 0 network 10.10.10.1/30  # GRE-туннель
+
+# Настройка пароля для OSPF
+set protocols ospf authentication message-digest
+set protocols ospf authentication key P@ssw0rd
+
+# Обмен маршрутами с FW-DT
+set protocols ospf area 0 network 192.168.33.0/24  # Сети в DT
+
+# Анонсировать маршрут по умолчанию
+set protocols ospf default-information originate
+
+# Запрет на вброс маршрутов с ненужных интерфейсов
+set protocols ospf interface eth0 passive-interface
+set protocols ospf interface tun0 passive-interface  # Если вы не хотите анонсировать этот интерфейс
+
+# Включение OSPF
+commit
+save
+exit
+```
+
+#### **На FW-DT (Ideco ngfw)**
+1. Настроим FW-DT для получения маршрутов от R-DT через OSPF.
+2. Применим парольную защиту для OSPF.
+
+```bash
+configure
+
+# Включение OSPF
+set protocols ospf parameters router-id 192.168.33.2
+set protocols ospf area 0 network 192.168.33.0/24  # Сети FW-DT
+
+# Настройка пароля для OSPF
+set protocols ospf authentication message-digest
+set protocols ospf authentication key P@ssw0rd
+
+# Получение маршрутов от R-DT
+set protocols ospf area 0 network 10.10.10.2/30  # GRE-туннель с R-DT
+
+# Включение OSPF
+commit
+save
+exit
+```
+
+---
+
+### **3. Проверка OSPF**
+
+1. На **R-DT** и **R-HQ** проверьте, что маршруты правильно анонсируются и принимаются:
+```bash
+show ip ospf neighbor
+show ip ospf route
+```
+
+2. На **FW-DT** убедитесь, что маршруты от **R-DT** получены:
+```bash
+show ip ospf neighbor
+show ip ospf route
+```
+
+---
+
+### **4. Резюме**
+Мы настроили OSPF для динамической маршрутизации между офисами DT и HQ, а также между R-DT и FW-DT, с применением парольной защиты протокола. Также были настроены ограничения на анонсирование маршрутов с ненужных интерфейсов.
