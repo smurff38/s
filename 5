@@ -1,0 +1,52 @@
+EcoRouter использует **VyOS** в качестве операционной системы. Соответственно, настройка DHCP будет выполняться через командную строку `configure`.  
+
+---
+
+## **Настройка DHCP на EcoRouter (VyOS)**
+### **1. Вход в режим конфигурации**
+На каждом маршрутизаторе (`R-HQ` и `R-DT`) выполните:  
+```bash
+configure
+```
+
+---
+
+### **2. Настройка DHCP-сервера**
+#### **На R-HQ (для сети 192.168.11.0/24)**
+```bash
+set service dhcp-server shared-network-name HQ subnet 192.168.11.0/24 range 0 start 192.168.11.100
+set service dhcp-server shared-network-name HQ subnet 192.168.11.0/24 range 0 stop 192.168.11.200
+set service dhcp-server shared-network-name HQ subnet 192.168.11.0/24 default-router 192.168.11.1
+set service dhcp-server shared-network-name HQ subnet 192.168.11.0/24 dns-server 8.8.8.8
+set service dhcp-server shared-network-name HQ subnet 192.168.11.0/24 dns-server 8.8.4.4
+set service dhcp-server shared-network-name HQ subnet 192.168.11.0/24 domain-name au.team
+```
+
+#### **На R-DT (для сети 192.168.33.0/24)**
+```bash
+set service dhcp-server shared-network-name DT subnet 192.168.33.0/24 range 0 start 192.168.33.100
+set service dhcp-server shared-network-name DT subnet 192.168.33.0/24 range 0 stop 192.168.33.200
+set service dhcp-server shared-network-name DT subnet 192.168.33.0/24 default-router 192.168.33.1
+set service dhcp-server shared-network-name DT subnet 192.168.33.0/24 dns-server 8.8.8.8
+set service dhcp-server shared-network-name DT subnet 192.168.33.0/24 dns-server 8.8.4.4
+set service dhcp-server shared-network-name DT subnet 192.168.33.0/24 domain-name au.team
+```
+
+---
+
+### **3. Сохранение конфигурации**
+После настройки на каждом маршрутизаторе выполните:
+```bash
+commit
+save
+exit
+```
+
+---
+
+### **4. Проверка работы DHCP**
+Проверить статус сервера можно командой:
+```bash
+show dhcp server leases
+```
+Если всё настроено правильно, клиенты (`CLI-HQ` и `CLI-DT`) получат IP-адреса из соответствующих пулов. 🚀
