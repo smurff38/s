@@ -1,0 +1,135 @@
+Прошу прощения за недоразумение. Если вы используете **Alt Linux 10**, а не **Ubuntu**, то установка Docker и создание локального Registry будет немного отличаться.
+
+Вот исправленный процесс установки Docker и развертывания контейнеров для **Alt Linux 10**.
+
+### **1. Установка Docker на Alt Linux 10**
+
+1. **Добавьте репозиторий Docker**:
+   
+   В первую очередь добавьте репозиторий Docker для вашей системы. Для этого выполните следующие команды:
+
+```bash
+sudo dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+```
+
+2. **Установите Docker**:
+
+```bash
+sudo dnf install docker-ce
+```
+
+3. **Запустите и активируйте сервис Docker**:
+
+```bash
+sudo systemctl start docker
+sudo systemctl enable docker
+```
+
+4. **Проверьте, что Docker работает**:
+
+```bash
+sudo docker --version
+```
+
+### **2. Создание локального Docker Registry**
+
+1. **Запуск локального Docker Registry**:
+
+Для создания локального Docker Registry используем официальный образ:
+
+```bash
+sudo docker run -d -p 5000:5000 --name registry registry:2
+```
+
+2. **Проверьте, что Registry работает**:
+
+```bash
+sudo docker ps
+```
+
+Вы должны увидеть контейнер с именем `registry`, работающий на порту `5000`.
+
+### **3. Написание Dockerfile для приложения web**
+
+1. **Создайте директорию для проекта**:
+
+```bash
+mkdir ~/web-app
+cd ~/web-app
+```
+
+2. **Напишите Dockerfile**:
+
+Создайте файл `Dockerfile`:
+
+```bash
+nano Dockerfile
+```
+
+Содержимое Dockerfile:
+
+```Dockerfile
+# Используем базовый образ nginx:alpine
+FROM nginx:alpine
+
+# Копируем index.html в директорию nginx для отображения
+COPY index.html /usr/share/nginx/html/index.html
+```
+
+3. **Напишите файл index.html**:
+
+Создайте файл `index.html`:
+
+```bash
+nano index.html
+```
+
+Содержимое файла `index.html`:
+
+```html
+<html>
+    <body>
+        <center><h1><b>WEB</b></h1></center>
+    </body>
+</html>
+```
+
+### **4. Сборка Docker образа и загрузка в локальный Registry**
+
+1. **Соберите образ из Dockerfile**:
+
+```bash
+sudo docker build -t localhost:5000/web:1.0 .
+```
+
+2. **Загрузите образ в локальный Registry**:
+
+```bash
+sudo docker push localhost:5000/web:1.0
+```
+
+### **5. Развертывание Docker контейнера с использованием образа из локального Registry**
+
+1. **Разверните контейнер с использованием образа из локального Registry**:
+
+```bash
+sudo docker run -d --name web -p 80:80 --restart always localhost:5000/web:1.0
+```
+
+2. **Проверьте, что контейнер работает**:
+
+```bash
+sudo docker ps
+```
+
+Вы должны увидеть контейнер `web`, работающий на порту 80.
+
+3. Откройте браузер и перейдите по IP адресу вашего сервера **SRV2-DT** (или localhost), чтобы увидеть страницу с текстом "WEB".
+
+### **Резюме для Alt Linux 10**
+
+1. Установили Docker с помощью `dnf`.
+2. Создали локальный Docker Registry и загрузили в него образ с веб-приложением.
+3. Развернули контейнер и настроили его на автоматический запуск при перезагрузке системы.
+
+Теперь ваш контейнер будет работать на порту 80, и приложение доступно через локальный Docker Registry.
