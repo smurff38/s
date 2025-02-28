@@ -1,0 +1,96 @@
+Для настройки **nginx** как обратного прокси-сервера на **SRV1-DT** с перенаправлением по доменным именам на другие сервисы, выполните следующие шаги.
+
+### **Шаг 1: Установка nginx**
+
+1. Установите nginx на **SRV1-DT**:
+
+```bash
+sudo dnf install nginx
+```
+
+2. Запустите nginx и добавьте его в автозагрузку:
+
+```bash
+sudo systemctl start nginx
+sudo systemctl enable nginx
+```
+
+### **Шаг 2: Настройка nginx как обратного прокси-сервера**
+
+1. Откройте конфигурационный файл nginx для редактирования:
+
+```bash
+sudo nano /etc/nginx/nginx.conf
+```
+
+2. Добавьте или измените конфигурацию для проксирования трафика в зависимости от доменных имен.
+
+#### **Перенаправление на контейнер web на SRV2-DT**
+
+Добавьте следующий блок в файл конфигурации nginx:
+
+```nginx
+server {
+    listen 80;
+    server_name www.au.team;
+
+    location / {
+        proxy_pass http://SRV2-DT:80;  # Укажите правильный IP адрес или FQDN SRV2-DT, где работает контейнер web
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+#### **Перенаправление на Zabbix на SRV3-DT**
+
+Добавьте следующий блок для перенаправления на сервис Zabbix:
+
+```nginx
+server {
+    listen 80;
+    server_name zabbix.au.team;
+
+    location / {
+        proxy_pass http://SRV3-DT/zabbix;  # Укажите правильный IP адрес или FQDN SRV3-DT, где работает сервис Zabbix
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+3. Сохраните изменения и закройте файл.
+
+### **Шаг 3: Настройка сетевого оборудования**
+
+Чтобы обеспечить правильную работу сервисов, убедитесь, что:
+
+1. **DNS записи** для доменных имен **www.au.team** и **zabbix.au.team** корректно указывают на **SRV1-DT**. Для этого нужно создать соответствующие записи в DNS сервере для этих доменов.
+
+2. **Порты 80 и 443** (если требуется SSL) должны быть открыты на **SRV1-DT** для входящих запросов и проксирования на **SRV2-DT** и **SRV3-DT**.
+
+3. Убедитесь, что **SRV2-DT** и **SRV3-DT** доступны для **SRV1-DT** через сеть. Если нужно, настройте межсетевой экран и маршрутизацию.
+
+### **Шаг 4: Перезапуск nginx**
+
+После внесения изменений в конфигурацию nginx, перезапустите сервис для применения настроек:
+
+```bash
+sudo systemctl restart nginx
+```
+
+### **Шаг 5: Тестирование**
+
+1. Откройте браузер и введите **www.au.team**. Вы должны быть перенаправлены на контейнер **web** на **SRV2-DT**.
+2. Откройте **zabbix.au.team** и убедитесь, что вас перенаправляют на сервис **Zabbix** на **SRV3-DT**.
+
+### **Резюме**
+
+- Вы настроили **nginx** на **SRV1-DT** как обратный прокси-сервер для перенаправления трафика с доменных имен:
+  - **www.au.team** — на контейнер **web** на **SRV2-DT**.
+  - **zabbix.au.team** — на сервис **Zabbix** на **SRV3-DT**.
+- Убедитесь, что DNS записи и сетевая маршрутизация настроены правильно для обеспечения доступа к этим сервисам.
