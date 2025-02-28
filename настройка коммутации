@@ -1,0 +1,150 @@
+Для настройки коммутации на серверах с **Альт Сервер 10** с использованием **Open vSwitch (OVS)**, выполните следующие шаги:
+
+---
+
+### **1. Установка Open vSwitch**
+Если **Open vSwitch** не установлен, установите его:
+```bash
+apt-get install openvswitch
+```
+или
+```bash
+dnf install openvswitch
+```
+
+Запустите и включите службу:
+```bash
+systemctl start openvswitch
+systemctl enable openvswitch
+```
+
+---
+
+### **2. Настройка коммутаторов SW1-HQ, SW2-HQ, SW3-HQ**
+
+#### **Создание коммутатора**
+Коммутаторы должны быть названы в верхнем регистре:
+```bash
+ovs-vsctl add-br SW1-HQ
+ovs-vsctl add-br SW2-HQ
+ovs-vsctl add-br SW3-HQ
+```
+
+#### **Добавление физических портов**
+Передаем все физические порты в Open vSwitch. Допустим, у нас интерфейсы `eth1`, `eth2`, `eth3`:
+```bash
+ovs-vsctl add-port SW1-HQ eth1
+ovs-vsctl add-port SW1-HQ eth2
+ovs-vsctl add-port SW1-HQ eth3
+```
+
+```bash
+ovs-vsctl add-port SW2-HQ eth1
+ovs-vsctl add-port SW2-HQ eth2
+ovs-vsctl add-port SW2-HQ eth3
+```
+
+```bash
+ovs-vsctl add-port SW3-HQ eth1
+ovs-vsctl add-port SW3-HQ eth2
+ovs-vsctl add-port SW3-HQ eth3
+```
+
+#### **Включение портов**
+Убедимся, что интерфейсы активны:
+```bash
+ip link set eth1 up
+ip link set eth2 up
+ip link set eth3 up
+```
+
+---
+
+### **3. Создание интерфейсов управления (MGMT)**
+Интерфейсы управления (`MGMT`) должны использовать **VLAN 330**.
+
+```bash
+ovs-vsctl add-port SW1-HQ MGMT tag=330 -- set interface MGMT type=internal
+ovs-vsctl add-port SW2-HQ MGMT tag=330 -- set interface MGMT type=internal
+ovs-vsctl add-port SW3-HQ MGMT tag=330 -- set interface MGMT type=internal
+```
+
+Задаем IP-адреса для управления:
+```bash
+ip addr add 192.168.33.1/24 dev MGMT
+ip link set MGMT up
+```
+
+---
+
+### **4. Настройка STP (Spanning Tree Protocol)**
+Настраиваем протокол STP, где **SW1-HQ** будет корнем дерева:
+```bash
+ovs-vsctl set bridge SW1-HQ stp_enable=true
+ovs-vsctl set bridge SW2-HQ stp_enable=true
+ovs-vsctl set bridge SW3-HQ stp_enable=true
+```
+На **SW1-HQ** выставляем приоритет ниже (чтобы он стал корневым):
+```bash
+ovs-vsctl set bridge SW1-HQ other-config:stp-priority=0
+```
+
+---
+
+### **5. Настройка VLAN**
+Каждое устройство должно находиться в соответствующем VLAN:
+
+- **Клиенты** → VLAN 110
+- **Сервера** → VLAN 220
+- **Администраторы** → VLAN 330
+
+Добавляем VLAN на порты:
+
+```bash
+ovs-vsctl add-port SW1-HQ vlan110 tag=110 -- set interface vlan110 type=internal
+ovs-vsctl add-port SW1-HQ vlan220 tag=220 -- set interface vlan220 type=internal
+ovs-vsctl add-port SW1-HQ vlan330 tag=330 -- set interface vlan330 type=internal
+```
+
+Задаем IP-адреса для VLAN:
+```bash
+ip addr add 192.168.11.1/24 dev vlan110
+ip addr add 192.168.22.1/24 dev vlan220
+ip addr add 192.168.33.1/24 dev vlan330
+ip link set vlan110 up
+ip link set vlan220 up
+ip link set vlan330 up
+```
+
+---
+
+### **6. Настройка SW-DT (виртуального коммутатора)**
+```bash
+ovs-vsctl add-br SW-DT
+ovs-vsctl add-port SW-DT eth1
+ovs-vsctl add-port SW-DT eth2
+ovs-vsctl add-port SW-DT eth3
+```
+
+---
+
+### **7. Проверка конфигурации**
+Проверяем созданные коммутаторы и порты:
+```bash
+ovs-vsctl show
+```
+
+Проверяем статус интерфейсов:
+```bash
+ip a
+```
+
+Проверяем работу STP:
+```bash
+ovs-appctl stp/show SW1-HQ
+```
+
+---
+
+### **Заключение**
+Теперь у вас настроены **Open vSwitch** на всех коммутаторах с учетом VLAN и STP.
