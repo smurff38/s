@@ -1,0 +1,146 @@
+Для настройки узла управления Ansible на **ADMIN-DT** и конфигурации инвентаря, выполните следующие шаги:
+
+### **Шаг 1: Установка Ansible на ADMIN-DT**
+
+1. Установите Ansible:
+
+   Для **Alt Server 10** и **Alt Рабочая Станция 10** используется стандартный пакетный менеджер `dnf`.
+
+   ```bash
+   sudo dnf install ansible
+   ```
+
+2. Проверьте успешность установки, запустив команду:
+
+   ```bash
+   ansible --version
+   ```
+
+### **Шаг 2: Настройка инвентаря Ansible**
+
+1. Создайте директорию для инвентаря (если она не существует) и создайте файл инвентаря:
+
+   ```bash
+   sudo mkdir -p /etc/ansible
+   sudo nano /etc/ansible/inventory
+   ```
+
+2. Добавьте следующее содержимое в файл **/etc/ansible/inventory**:
+
+   ```ini
+   [Networking]
+   R-DT ansible_host=<IP_R-DT> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   R-HQ ansible_host=<IP_R-HQ> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+
+   [Servers]
+   SRV1-HQ ansible_host=<IP_SRV1-HQ> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   SRV1-DT ansible_host=<IP_SRV1-DT> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   SRV2-DT ansible_host=<IP_SRV2-DT> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   SRV3-DT ansible_host=<IP_SRV3-DT> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+
+   [Clients]
+   ADMIN-HQ ansible_host=<IP_ADMIN-HQ> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   ADMIN-DT ansible_host=<IP_ADMIN-DT> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   CLI-HQ ansible_host=<IP_CLI-HQ> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   CLI-DT ansible_host=<IP_CLI-DT> ansible_user=sshuser ansible_python_interpreter=/usr/bin/python3
+   ```
+
+   Замените `<IP_*>` на реальные IP-адреса соответствующих устройств.
+
+3. Убедитесь, что файл инвентаря доступен для чтения:
+
+   ```bash
+   sudo chmod 644 /etc/ansible/inventory
+   ```
+
+4. Настройте Ansible использовать этот инвентарь по умолчанию. Откройте или создайте файл **ansible.cfg**:
+
+   ```bash
+   sudo nano /etc/ansible/ansible.cfg
+   ```
+
+5. Добавьте или убедитесь, что в конфигурации указана настройка для использования инвентаря по умолчанию:
+
+   ```ini
+   [defaults]
+   inventory = /etc/ansible/inventory
+   ```
+
+### **Шаг 3: Реализация доступа через SSH**
+
+1. Убедитесь, что у вас настроен SSH-доступ по пользователю `sshuser` ко всем устройствам, и он использует правильный интерпретатор Python:
+
+   - Убедитесь, что на целевых устройствах установлен Python 3:
+
+     ```bash
+     sudo dnf install python3
+     ```
+
+   - Убедитесь, что на всех устройствах правильно настроены SSH-ключи и что SSH доступен для пользователя `sshuser`. Вы можете добавить публичный ключ на целевых устройствах:
+
+     ```bash
+     ssh-copy-id sshuser@<IP_*> 
+     ```
+
+2. Отключите проверку SSH-ключа (по желанию) для упрощения процесса тестирования, добавив параметр в конфигурацию Ansible:
+
+   В **ansible.cfg** добавьте:
+
+   ```ini
+   [defaults]
+   host_key_checking = False
+   ```
+
+### **Шаг 4: Тестирование с помощью команды "ping"**
+
+1. Для тестирования подключения, используйте команду Ansible "ping":
+
+   ```bash
+   ansible all -m ping
+   ```
+
+   Вы должны увидеть вывод, например:
+
+   ```bash
+   R-DT | SUCCESS | rc=0 >>
+   pong
+   R-HQ | SUCCESS | rc=0 >>
+   pong
+   SRV1-HQ | SUCCESS | rc=0 >>
+   pong
+   SRV1-DT | SUCCESS | rc=0 >>
+   pong
+   SRV2-DT | SUCCESS | rc=0 >>
+   pong
+   SRV3-DT | SUCCESS | rc=0 >>
+   pong
+   ADMIN-HQ | SUCCESS | rc=0 >>
+   pong
+   ADMIN-DT | SUCCESS | rc=0 >>
+   pong
+   CLI-HQ | SUCCESS | rc=0 >>
+   pong
+   CLI-DT | SUCCESS | rc=0 >>
+   pong
+   ```
+
+   Если вы получаете ответы "pong", это означает, что все устройства доступны и Ansible настроен корректно.
+
+### **Шаг 5: Убедитесь, что Ansible выполняется от пользователя `user` без использования `sudo`**
+
+1. Убедитесь, что у пользователя `user` есть права на выполнение команд без использования `sudo`. На каждом устройстве добавьте пользователя `user` в группу `ansible` или аналогичную группу, если нужно.
+
+2. Убедитесь, что команды выполняются без использования `sudo` (например, для выполнения тестов):
+
+   ```bash
+   ansible all -m ping -u user
+   ```
+
+### **Резюме**
+
+- Вы установили и настроили Ansible на **ADMIN-DT**.
+- Инвентарь был настроен для трех групп устройств: **Networking**, **Servers**, **Clients**.
+- Доступ ко всем устройствам настроен через SSH по пользователю `sshuser`, с корректным интерпретатором Python и отключенной проверкой SSH-ключа.
+- Вы успешно проверили соединение с устройствами с помощью команды `ansible all -m ping`.
+
+Теперь вы можете начать использовать Ansible для управления вашими устройствами в рамках централизованного управления.
