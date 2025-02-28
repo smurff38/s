@@ -1,0 +1,220 @@
+Для реализации доменной инфраструктуры с использованием **Samba AD** на сервере **SRV1-HQ** и настроек резервного контроллера на **SRV1-DT**, а также для создания общего каталога **SAMBA**, можно выполнить следующие шаги.
+
+### **1. Установка и настройка Samba на SRV1-HQ**
+
+#### 1.1. Установка Samba и необходимых пакетов
+
+На **SRV1-HQ** нужно установить **Samba**, **BIND9_DLZ** и другие компоненты для работы в качестве доменного контроллера:
+
+```bash
+sudo apt update
+sudo apt install samba krb5-config krb5-user smbclient bind9 bind9utils bind9-doc
+```
+
+#### 1.2. Настройка Samba для использования в качестве доменного контроллера
+
+1. Отредактируйте конфигурацию Samba, чтобы включить поддержку Active Directory. Откройте конфигурационный файл:
+
+```bash
+sudo nano /etc/samba/smb.conf
+```
+
+2. Добавьте или отредактируйте следующие строки в секции `[global]` для конфигурации контроллера:
+
+```bash
+[global]
+   workgroup = AU
+   realm = AU.TEAM
+   netbios name = SRV1-HQ
+   server role = active directory domain controller
+   dns forwarder = 8.8.8.8  # Используйте DNS-серверы для внешнего разрешения
+
+   # Для BIND9_DLZ
+   dns proxy = no
+   log level = 1
+
+[netlogon]
+   path = /var/lib/samba/sysvol/au.team/scripts
+   read only = no
+
+[sysvol]
+   path = /var/lib/samba/sysvol
+   read only = no
+```
+
+3. Инициализация Samba в качестве доменного контроллера:
+
+```bash
+sudo samba-tool domain provision --use-rfc2307 --interactive
+```
+
+- Укажите доменное имя (`AU.TEAM`), организацию, административный пароль и другие параметры в интерактивном режиме.
+
+4. Включите службу Samba:
+
+```bash
+sudo systemctl restart samba
+sudo systemctl enable samba
+```
+
+#### 1.3. Настройка BIND9_DLZ для DNS
+
+Для использования **BIND9_DLZ** нужно настроить его в качестве DNS-сервера для вашего домена.
+
+1. Откройте конфигурацию BIND:
+
+```bash
+sudo nano /etc/bind/named.conf.options
+```
+
+2. Добавьте или измените следующие строки:
+
+```bash
+options {
+    directory "/var/cache/bind";
+    allow-query { any; };
+    recursion yes;
+
+    // Использование DNS для Samba
+    dnssec-validation auto;
+    auth-nxdomain no;
+    listen-on-v6 { any; };
+};
+```
+
+3. Включите поддержку **BIND9_DLZ** в Samba:
+
+```bash
+sudo nano /etc/samba/smb.conf
+```
+
+Добавьте:
+
+```bash
+   [global]
+   dns backend = BIND9_DLZ
+```
+
+4. Перезапустите службу BIND:
+
+```bash
+sudo systemctl restart bind9
+sudo systemctl enable bind9
+```
+
+#### 1.4. Создание пользователей и групп
+
+Для создания пользователей и групп используйте команду **samba-tool**.
+
+1. Создайте пользователей **user1** до **user30**:
+
+```bash
+for i in {1..30}; do sudo samba-tool user add user$i P@ssw0rd; done
+```
+
+2. Создайте группы **group1**, **group2**, **group3**:
+
+```bash
+sudo samba-tool group add group1
+sudo samba-tool group add group2
+sudo samba-tool group add group3
+```
+
+3. Добавьте пользователей в соответствующие группы:
+
+```bash
+for i in {1..10}; do sudo samba-tool group addmembers group1 user$i; done
+for i in {11..20}; do sudo samba-tool group addmembers group2 user$i; done
+for i in {21..30}; do sudo samba-tool group addmembers group3 user$i; done
+```
+
+4. Создайте подразделения и добавьте пользователей:
+
+```bash
+sudo samba-tool ou create "OU=CLI,DC=au,DC=team"
+sudo samba-tool ou create "OU=ADMIN,DC=au,DC=team"
+
+# Добавить пользователей в подразделения
+for i in {1..10}; do sudo samba-tool user setou "user$i" "OU=CLI,DC=au,DC=team"; done
+for i in {11..30}; do sudo samba-tool user setou "user$i" "OU=ADMIN,DC=au,DC=team"; done
+```
+
+#### 1.5. Настройка клиентов домена
+
+Для добавления клиентов в домен:
+
+1. На **ADMIN-DT**, **CLI-DT**, **ADMIN-HQ**, **CLI-HQ** выполните команду:
+
+```bash
+sudo realm join --user=administrator au.team
+```
+
+2. Убедитесь, что пользователи могут аутентифицироваться:
+
+```bash
+id user1
+```
+
+---
+
+### **2. Настройка резервного доменного контроллера на SRV1-DT**
+
+#### 2.1. Установка и настройка Samba на SRV1-DT
+
+1. Установите Samba и необходимые пакеты:
+
+```bash
+sudo apt install samba krb5-config krb5-user smbclient
+```
+
+2. Настройте **SRV1-DT** как резервный контроллер домена:
+
+```bash
+sudo samba-tool domain join au.team DC -U"administrator" --password=P@ssw0rd --realm=AU.TEAM
+```
+
+3. Настройте BIND9_DLZ для DNS на SRV1-DT, как на **SRV1-HQ**, и перезапустите сервисы.
+
+---
+
+### **3. Настройка общей папки SAMBA**
+
+1. Создайте общую папку на **SRV1-HQ**:
+
+```bash
+sudo mkdir -p /opt/data
+sudo chown -R nobody:nogroup /opt/data
+sudo chmod -R 0777 /opt/data
+```
+
+2. Отредактируйте конфигурацию Samba для создания общей папки:
+
+```bash
+sudo nano /etc/samba/smb.conf
+```
+
+Добавьте следующую секцию:
+
+```bash
+[SAMBA]
+   path = /opt/data
+   read only = no
+   guest ok = yes
+   force user = nobody
+   force group = nogroup
+```
+
+3. Перезапустите Samba:
+
+```bash
+sudo systemctl restart samba
+```
+
+---
+
+### **Резюме**
+1. На **SRV1-HQ** настроен основной доменный контроллер с **Samba AD**, с использованием модуля **BIND9_DLZ**.
+2. Созданы пользователи **user1** до **user30**, и они распределены по группам **group1**, **group2** и **group3**.
+3. Созданы подразделения **CLI** и **ADMIN**, и пользователи были помещены в соответствующие подразделения.
+4. На **SRV1-DT** настроен резервный доменный контроллер.
+5. Создана общая папка **SAMBA** на **SRV1-HQ** с доступом по сети.
